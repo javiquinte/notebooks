@@ -12,21 +12,6 @@
    ]
   },
   {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {
-    "colab": {
-     "base_uri": "https://localhost:8080/"
-    },
-    "id": "f2Fpe2tcofm-",
-    "outputId": "7c1c5b95-13c5-4fb3-c598-707db22de807"
-   },
-   "outputs": [],
-   "source": [
-    "!pip install boto3"
-   ]
-  },
-  {
    "cell_type": "markdown",
    "metadata": {
     "id": "RXmrBhos1b7W"
