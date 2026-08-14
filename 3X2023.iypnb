@@ -1,0 +1,293 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "MW7_QEH-ZHfu"
+   },
+   "source": [
+    "In case that you use data from this Notebook as it is originally provided (network `3X2023`), do not forget to use the proper citation for attribution:\n",
+    "\n",
+    "*   Afonso Loureiro (2024): GeoLab. GFZ Data Services. Dataset/DAS. doi:[10.14470/8K802502](https://doi.org/10.14470/8K802502)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/"
+    },
+    "id": "f2Fpe2tcofm-",
+    "outputId": "7c1c5b95-13c5-4fb3-c598-707db22de807"
+   },
+   "outputs": [],
+   "source": [
+    "!pip install boto3"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "RXmrBhos1b7W"
+   },
+   "source": [
+    "`boto3` is one of the libraries you could use from python to access data archived in some S3 Object Storage."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "cCFsXiRhqGYi"
+   },
+   "outputs": [],
+   "source": [
+    "import os\n",
+    "from datetime import datetime\n",
+    "\n",
+    "import boto3\n",
+    "import numpy as np\n",
+    "from botocore import UNSIGNED\n",
+    "from botocore.config import Config\n",
+    "from h5py import File\n",
+    "from matplotlib import pyplot as plt"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "j54yxfKL1F4U"
+   },
+   "source": [
+    "It is very important to define who is actually hosting the data. Most of the examples you will find will be hosted in Amazon, but your Universities could also be providers of the S3 service."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "ExbiBS0ssBHb"
+   },
+   "outputs": [],
+   "source": [
+    "endpoint = \"https://s3.gfz-potsdam.de/\""
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "Dm527xiX1y6G"
+   },
+   "source": [
+    "Pay attention to the `UNSIGNED` value in the configuration. In this particular case, you will access data that does not require to authenticate. This is not so usual in the S3 world. Usually you will be given a pair of keys (credentials) to operate with the service provider."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "iRaY8mrL2R3z"
+   },
+   "source": [
+    "Within `boto3` there are 2 ways to operate on the buckets and objects. Through a `resource` or a `client`. In this examlpe below we use the `resource` to get the data."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "X2n7E1UZ1vxh"
+   },
+   "outputs": [],
+   "source": [
+    "s3r = boto3.resource(\n",
+    "    \"s3\", endpoint_url=endpoint, config=Config(signature_version=UNSIGNED)\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "bVQV2Wr63EBv"
+   },
+   "source": [
+    "Once the `resource` is created you can define the objects to operate with. For instance, the `Bucket` where the 3X2023 data (GeoLab - Madeira) is hosted."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "U8Ib_3gMtRdS"
+   },
+   "outputs": [],
+   "source": [
+    "bucket = s3r.Bucket(\"gc.3x2023\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "qkpdnubZLlCq"
+   },
+   "source": [
+    "Let's define the time window and the channel to display."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "Nnrt2GZQLIt1"
+   },
+   "outputs": [],
+   "source": [
+    "channel = 500\n",
+    "starttime = datetime(2023, 11, 2, 9, 31, 0)\n",
+    "endtime = datetime(2023, 11, 2, 9, 31, 10)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "nNA08_RGPwDt"
+   },
+   "source": [
+    "Create auxiliary variables to loop through objects and keep the ones that lie within the time window. Here, we will check all objects that were created in the hour of the time window."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "IEgw4AxbMb8w"
+   },
+   "outputs": [],
+   "source": [
+    "prefix = starttime.strftime(\"%Y%m%d/dphi/%H\")\n",
+    "h5start = starttime.strftime(\"%Y%m%d/dphi/%H%M%S.h5\")\n",
+    "h5end = endtime.strftime(\"%Y%m%d/dphi/%H%M%S.h5\")\n",
+    "files = list()\n",
+    "prevfile = None"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "0a7zGzyA3QXs"
+   },
+   "source": [
+    "Loop throug `objects` and always add a previous file to keep the beginning of the time window. Stop as soon as the time window is gone. After the loop, add the last file that is missing."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/"
+    },
+    "id": "0UwHN9bxtbHw",
+    "outputId": "39a1d4b4-d33a-4696-e2ca-dcf2c9c8a4ec"
+   },
+   "outputs": [],
+   "source": [
+    "for obj in bucket.objects.filter(Prefix=prefix):\n",
+    "    # If time window is already gone then break\n",
+    "    if h5end < obj.key:\n",
+    "        break\n",
+    "    # If we are in the time window\n",
+    "    if h5start <= obj.key <= h5end:\n",
+    "        print(prevfile)\n",
+    "        files.append(prevfile)\n",
+    "    prevfile = obj.key\n",
+    "\n",
+    "# If there was a file still pending\n",
+    "if prevfile is not None:\n",
+    "    files.append(prevfile)\n",
+    "    print(prevfile)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "721ST5IY3cPF"
+   },
+   "source": [
+    "Use the `download_file` method to get some object(s) and save it physically in your local computer. Then, open it and extract the channel you want to display."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "TZBC4sSSv0te"
+   },
+   "outputs": [],
+   "source": [
+    "stream = np.array([])\n",
+    "for f in files:\n",
+    "    _, fname = os.path.split(f)\n",
+    "    bucket.download_file(Key=f, Filename=fname)\n",
+    "    fi = File(fname)\n",
+    "    stream = np.append(stream, fi[\"data\"][:, channel])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {
+    "id": "S2RdCsIy3nNh"
+   },
+   "source": [
+    "Check what you got..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/",
+     "height": 430
+    },
+    "id": "fJALNR49wjSS",
+    "outputId": "47c89c36-859a-4d25-ea8e-936c4e16b2f8"
+   },
+   "outputs": [],
+   "source": [
+    "plt.plot(stream)\n",
+    "plt.show()"
+   ]
+  }
+ ],
+ "metadata": {
+  "authors": [
+   {
+    "name": "Javier Quinteros (GEOFON)"
+   }
+  ],
+  "colab": {
+   "provenance": []
+  },
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.14"
+  },
+  "title": "Access DAS raw data from a S3 bucket"
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
