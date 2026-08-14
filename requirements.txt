@@ -1,1 +1,5 @@
 boto3
+numpy
+h5py
+zarr
+xarray
