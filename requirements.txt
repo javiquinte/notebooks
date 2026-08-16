@@ -1,7 +1,7 @@
 boto3
 numpy
 h5py
-zarr>=3
+zarr==3.*
 xarray
 matplotlib
 obstore
