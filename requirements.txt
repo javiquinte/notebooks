@@ -1,4 +1,5 @@
 boto3
+s3fs
 numpy
 h5py
 zarr==3.*
